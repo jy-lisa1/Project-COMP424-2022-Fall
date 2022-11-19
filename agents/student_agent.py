@@ -50,7 +50,6 @@ class StudentAgent(Agent):
         is_reached = False
         while state_queue and not is_reached:
             cur_pos, cur_step = state_queue.pop(0)
-            
             r, c = cur_pos
             if cur_step == max_step:
                 break
@@ -94,8 +93,6 @@ class StudentAgent(Agent):
         adv_y = adv_pos[1]
         my_x = my_pos[0]
         my_y = my_pos[1]
-        x_diff = adv_x - my_x
-        y_diff = adv_y - my_y
 
         # get distance from us to adv at each possible next move
         distance_from_adv = [[10000 for x in range(n)] for y in range(n)] 
@@ -105,6 +102,16 @@ class StudentAgent(Agent):
             for c in range(0,n):
                 for dir in ["u","r","d","l"]:
                     if self.check_valid_step(chess_board,my_pos,(r,c),adv_pos,dir,max_step):
+                        
+                        # see if we're about to box ourselves in
+                        num_walls_around_us = 0
+                        for direction in [0,1,2,3]:
+                            if chess_board[r,c,direction]:
+                                num_walls_around_us += 1
+                        if num_walls_around_us >=2:
+                            continue
+
+                        # set this move as our best one
                         x_diff = abs(adv_x - r)
                         y_diff = abs(adv_y - c)
                         distance = x_diff + y_diff
@@ -114,12 +121,29 @@ class StudentAgent(Agent):
                             best_coordinates[0] = r
                             best_coordinates[1] = c
         
+        available_directions = []
         for dir in ["u","r","d","l"]:
             if self.check_valid_step(chess_board,my_pos,tuple(best_coordinates),adv_pos,dir,max_step):
+                available_directions.append(dir)
                 my_pos = tuple(best_coordinates)
-                direction = dir
                 break
 
-        # dummy return
+        # try to determine the best direction to place our barrier
+
+        if adv_x < best_coordinates[0] and "l" in available_directions:
+            direction = "l"
+
+        elif adv_x > best_coordinates[0] and "r" in available_directions:
+            direction = "r"
+
+        elif adv_y < best_coordinates[1] and "d" in available_directions:
+            direction = "d"
+
+        elif adv_y > best_coordinates[1] and "u" in available_directions:
+            direction = "u"
+
+        else:
+            direction = available_directions[0] # change this later
+            
         return my_pos, self.dir_map[direction]
 

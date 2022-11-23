@@ -120,7 +120,6 @@ class StudentAgent(Agent):
                     continue
 
                 # add next position to visited and to queue
-                if cur_step + 1 == max_step: continue
                 visited.add(tuple(next_pos))
                 state_queue.append((next_pos, cur_step + 1))
 

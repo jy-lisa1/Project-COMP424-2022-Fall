@@ -167,18 +167,29 @@ class StudentAgent(Agent):
             return False, my_score, adv_score
         return True, my_score, adv_score
 
-    # operator MinimaxDecision()
-        # for each legal operator o:
-            # apply the operator o and obtain the new game state s.
-            # Value[o] = MinimaxValue(s)
-        # return the operator o with the highest value Value[o].
+    def evaluate(self, chess_board, my_pos, adv_pos):
+        
+        heuristic = 10000
+        adv_x = adv_pos[0]
+        adv_y = adv_pos[1]
+        my_x = my_pos[0]
+        my_y = my_pos[1]
 
-    # double MinimaxValue(s)
-        # if isTerminal(s), return Utility(s).
-        # for each state s’ in Successors(s)
-            # let Value(s’) = MinimaxValue(s’).
-        # if Max’s turn to move in s, return maxs’Value(s’).
-        # if Min’s turn to move in s, return mins’Value(s’).
+        # see if we're about to box ourselves in
+        num_walls_around_us = 0
+        for direction in [0,1,2,3]:
+            if chess_board[my_x,my_y,direction]:
+                num_walls_around_us += 1
+            if num_walls_around_us >=2:   # return 10000 right away since this is very bad
+                return heuristic        
+        
+        # manhattan distance to opponent
+        x_diff = abs(adv_x - my_x)
+        y_diff = abs(adv_y - my_y)
+        distance = x_diff + y_diff
+        heuristic = distance
+
+        return heuristic
 
     def step(self, chess_board, my_pos, adv_pos, max_step):
         """
@@ -199,32 +210,18 @@ class StudentAgent(Agent):
         n = len(chess_board[1])
         adv_x = adv_pos[0]
         adv_y = adv_pos[1]
-        my_x = my_pos[0]
-        my_y = my_pos[1]
 
         # get distance from us to adv at each possible next move
         distance_from_adv = [[10000 for x in range(n)] for y in range(n)] 
         min_distance = 10000
-        best_coordinates = [my_x, my_y]
+        best_coordinates = [my_pos[0], my_pos[1]]
         for r in range(0,n):
             for c in range(0,n):
                 for dir in ["u","r","d","l"]:
                     if self.check_valid_step(chess_board,my_pos,(r,c),adv_pos,dir,max_step):
-                        
-                        # see if we're about to box ourselves in
-                        num_walls_around_us = 0
-                        for direction in [0,1,2,3]:
-                            if chess_board[r,c,direction]:
-                                num_walls_around_us += 1
-                        if num_walls_around_us >=2:
-                            continue
-
-                        # set this move as our best one
-                        x_diff = abs(adv_x - r)
-                        y_diff = abs(adv_y - c)
-                        distance = x_diff + y_diff
+                        distance = self.evaluate(chess_board,(r,c),adv_pos)
                         distance_from_adv[r][c] = distance
-                        if x_diff + y_diff < min_distance:
+                        if distance < min_distance:
                             min_distance = distance
                             best_coordinates[0] = r
                             best_coordinates[1] = c

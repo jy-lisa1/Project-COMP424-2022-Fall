@@ -12,6 +12,17 @@ class StudentAgent(Agent):
     A dummy class for your implementation. Feel free to use this class to
     add any helper functionalities needed for your agent.
     """
+
+    class State:
+        def __init__(self, chess_board, my_pos, adv_pos):
+            self.isVisited = False
+            self.isTerminal = False
+            self.utility = 10000
+            self.chess_board = chess_board
+            self.my_pos = my_pos
+            self.adv_pos = adv_pos
+            self.children = []
+
     def __init__(self):
         super(StudentAgent, self).__init__()
         self.autoplay = True
@@ -22,66 +33,6 @@ class StudentAgent(Agent):
             "d": 2,
             "l": 3,
         }
-
-    def check_valid_step(self, chess_board, start_pos, end_pos, adv_pos, barrier_dir, max_step):
-        """
-        Check if the step the agent takes is valid (reachable and within max steps).
-
-        Parameters
-        ----------
-        start_pos : tuple
-            The start position of the agent.
-        end_pos : np.ndarray
-            The end position of the agent.
-        barrier_dir : int
-            The direction of the barrier.
-        """
-
-        # Endpoint already has barrier or is boarder
-        row, column = end_pos
-        barrier_dir = self.dir_map[barrier_dir]
-
-        # check if there is already a barrier
-        if chess_board[row, column, barrier_dir]:
-            return False
-
-        # check if you are already at the end goal
-        if start_pos[0] == end_pos[0] and start_pos[1] == end_pos[1]:
-            return True
-
-        # BFS
-        state_queue = [(start_pos, 0)]
-        visited = {tuple(start_pos)}
-        is_reached = False
-        while state_queue and not is_reached:
-            cur_pos, cur_step = state_queue.pop(0)
-            row, column = cur_pos
-            if cur_step == max_step:
-                break
-
-            # try stepping in each direction, don't if there's a barrier in the way
-            for dir, move in enumerate(((-1, 0), (0, 1), (1, 0), (0, -1))):
-                if chess_board[row, column, dir]:
-                    continue
-
-                next_pos = (cur_pos[0] + move[0], cur_pos[1] + move[1])
-                next_equals_adv = next_pos[0] == adv_pos[0] and next_pos[1] == adv_pos[1]
-                next_equals_end = next_pos[0] == end_pos[0] and next_pos[1] == end_pos[1]
-                
-                # loop check
-                if next_equals_adv or tuple(next_pos) in visited:
-                    continue
-
-                # check if end goal reached
-                if next_equals_end:
-                    is_reached = True
-                    break
-
-                # add next position to visited and to queue
-                visited.add(tuple(next_pos))
-                state_queue.append((next_pos, cur_step + 1))
-
-        return is_reached
 
     def getValidSteps(self, chess_board, start_pos, adv_pos, max_step):
         """
@@ -96,10 +47,16 @@ class StudentAgent(Agent):
         barrier_dir : int
             The direction of the barrier.
         """
-
         # BFS
         state_queue = [(start_pos, 0)]
-        visited = {tuple(start_pos)} # stores possible positions
+        visited = {}
+
+        # initialize visited with all possible directions
+        for direction in [0, 1, 2, 3]:
+            if not chess_board[row, column, direction]:
+                visited.add(tuple(next_pos))
+                state_queue.append((next_pos, cur_step + 1))
+                visited.append(tuple(start_pos[0], start_pos[1], direction)) # stores possible positions
 
         while state_queue:
             cur_pos, cur_step = state_queue.pop(0)
@@ -121,8 +78,10 @@ class StudentAgent(Agent):
                     continue
 
                 # add next position to visited and to queue
-                visited.add(tuple(next_pos))
-                state_queue.append((next_pos, cur_step + 1))
+                for direction in [0, 1, 2, 3]:
+                    if not chess_board[row, column, direction]:
+                        visited.add(tuple(next_pos[0],next_pos[1],direction))
+                        state_queue.append((next_pos, cur_step + 1))
 
         return visited
 
@@ -180,6 +139,60 @@ class StudentAgent(Agent):
             return False, my_score, adv_score
         return True, my_score, adv_score
 
+    def check_endgame(self, state):
+        gameDone, myScore, advScore = self.check_endgame(self, state.chess_board, state.my_pos, state.adv_pos)
+        state.isTerminal = gameDone
+        state.utility = advScore - myScore
+        return state
+
+    def evaluate(self, chess_board, my_pos, adv_pos):
+        
+        # distance to opponent
+        heuristic = 10000
+        adv_x = adv_pos[0]
+        adv_y = adv_pos[1]
+        my_x = my_pos[0]
+        my_y = my_pos[1]
+        x_diff = abs(adv_x - my_x)
+        y_diff = abs(adv_y - my_y)
+        distance = x_diff + y_diff
+        heuristic = distance
+
+        return heuristic
+
+    def miniMaxDecision(self, chess_board, my_pos, adv_pos, max_step):
+        """
+        Uses minimax value function to decide the best move
+        """
+        validSteps = self.getValidSteps(chess_board, my_pos, adv_pos, max_step)
+        value = []
+        # get the utility of each possible move
+        for row, column in validSteps:
+            newBoard = copy.deepCopy(chess_board)
+            newBoard[row,column,self.dir_map[dir]] = True
+            newState = self.State(newBoard, (row,column), adv_pos, max_step)
+            value[(row,column)] = self.miniMaxValue(self, newState)
+        bestMove = min(value, key=value.get)
+        return bestMove
+
+    def miniMaxValue(self, state, max_step, myTurn):
+        """
+        Predicts a few futures n steps away using the evaluate function to get the value 
+        of non-terminal end nodes
+        returns the decision to make
+        """
+        bestStep = tuple(0,0,0)
+        value = []
+        state = self.check_endgame(state)
+        if state.isTerminal: return state.utility
+        # TO DO --- change this so that these are state objects
+        children = self.getValidSteps(state.chess_board, state.my_pos, state.adv_pos, max_step)
+        for child in children:
+            value[child] = self.miniMaxValue(child,max_step)
+        if myTurn: bestMove = min(value, key=value.get)
+        else: bestMove = max(value, key=value.get)
+        return bestStep
+
     def step(self, chess_board, my_pos, adv_pos, max_step):
         """
         Implement the step function of your agent here.
@@ -212,41 +225,34 @@ class StudentAgent(Agent):
 
         for (row,column) in validSteps: # check valid position
             for dir in ["u","r","d","l"]:
-                        if not(chess_board[row, column, self.dir_map[dir]]): # check valid barrier placement
+                if not(chess_board[row, column, self.dir_map[dir]]): # check valid barrier placement
 
-                            # see if we're about to box ourselves in
-                            num_walls_around_us = 0
-                            for direction in [0,1,2,3]:
-                                if chess_board[row,column,direction]:
-                                    num_walls_around_us += 1
-                            if num_walls_around_us >=2:
-                                continue
+                    # check the move wins
+                    newBoard = copy.deepcopy(chess_board)
+                    newBoard[row,column,self.dir_map[dir]] = True
+                    gameDone, myScore, advScore = self.check_endgame(newBoard, (row,column), adv_pos)
+                    if gameDone:
+                        result = myScore - advScore
+                        if result > 0:
+                            return (row,column), self.dir_map[dir]
 
-                            # try each move to see if we can win the game in one step
-                            validDirections = []
-                            for dir in ["u","r","d","l"]:
-                                if not(chess_board[row,column, self.dir_map[dir]]): # check valid barrier placement
-                                    validDirections.append(dir)
+                # see if we're about to box ourselves in
+                num_walls_around_us = 0
+                for direction in [0,1,2,3]:
+                    if chess_board[row,column,direction]:
+                        num_walls_around_us += 1
+                if num_walls_around_us >=2:
+                    continue
 
-                            # check each direction to see if would win
-                            for dir in validDirections:
-                                newBoard = copy.deepcopy(chess_board)
-                                newBoard[row,column,self.dir_map[dir]] = True
-                                gameDone, myScore, advScore = self.check_endgame(newBoard, (row,column), adv_pos)
-                                if gameDone:
-                                    result = myScore - advScore
-                                    if result > 0:
-                                        return (row,column), self.dir_map[dir]
-
-                            # else run at opponent
-                            x_diff = abs(adv_x - row)
-                            y_diff = abs(adv_y - column)
-                            distance = x_diff + y_diff
-                            distance_from_adv[row][column] = distance
-                            if x_diff + y_diff < min_distance:
-                                min_distance = distance
-                                best_coordinates[0] = row
-                                best_coordinates[1] = column
+                # else run at opponent
+                x_diff = abs(adv_x - row)
+                y_diff = abs(adv_y - column)
+                distance = x_diff + y_diff
+                distance_from_adv[row][column] = distance
+                if x_diff + y_diff < min_distance:
+                    min_distance = distance
+                    best_coordinates[0] = row
+                    best_coordinates[1] = column
         
         # take a step towards the opponent
         validDirections = []

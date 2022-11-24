@@ -72,6 +72,48 @@ class StudentAgent(Agent):
 
         return is_reached
 
+    def getValidSteps(self, chess_board, start_pos, adv_pos, max_step):
+        """
+        Check if the step the agent takes is valid (reachable and within max steps).
+
+        Parameters
+        ----------
+        start_pos : tuple
+            The start position of the agent.
+        end_pos : np.ndarray
+            The end position of the agent.
+        barrier_dir : int
+            The direction of the barrier.
+        """
+
+        # BFS
+        state_queue = [(start_pos, 0)]
+        visited = {tuple(start_pos)} # stores possible positions
+
+        while state_queue:
+            cur_pos, cur_step = state_queue.pop(0)
+            row, column = cur_pos
+            if cur_step == max_step:
+                continue
+
+            # try stepping in each direction, don't if there's a barrier in the way
+            for dir, move in enumerate(((-1, 0), (0, 1), (1, 0), (0, -1))):
+                if chess_board[row, column, dir]:
+                    continue
+
+                next_pos = (cur_pos[0] + move[0], cur_pos[1] + move[1])
+                next_equals_adv = next_pos[0] == adv_pos[0] and next_pos[1] == adv_pos[1]
+                
+                # loop check and check if its the opponents position
+                if next_equals_adv or tuple(next_pos) in visited:
+                    continue
+
+                # add next position to visited and to queue
+                visited.add(tuple(next_pos))
+                state_queue.append((next_pos, cur_step + 1))
+
+        return visited
+
     def check_endgame(self, chess_board, my_pos, adv_pos):
         """
         Check if the game ends and compute the current score of the agents.
@@ -124,6 +166,19 @@ class StudentAgent(Agent):
         if my_r == adv_r:
             return False, my_score, adv_score
         return True, my_score, adv_score
+
+    # operator MinimaxDecision()
+        # for each legal operator o:
+            # apply the operator o and obtain the new game state s.
+            # Value[o] = MinimaxValue(s)
+        # return the operator o with the highest value Value[o].
+
+    # double MinimaxValue(s)
+        # if isTerminal(s), return Utility(s).
+        # for each state s’ in Successors(s)
+            # let Value(s’) = MinimaxValue(s’).
+        # if Max’s turn to move in s, return maxs’Value(s’).
+        # if Min’s turn to move in s, return mins’Value(s’).
 
     def step(self, chess_board, my_pos, adv_pos, max_step):
         """
@@ -185,16 +240,12 @@ class StudentAgent(Agent):
 
         if adv_x < best_coordinates[0] and "l" in available_directions:
             direction = "l"
-
         elif adv_x > best_coordinates[0] and "r" in available_directions:
             direction = "r"
-
         elif adv_y < best_coordinates[1] and "d" in available_directions:
             direction = "d"
-
         elif adv_y > best_coordinates[1] and "u" in available_directions:
             direction = "u"
-
         else:
             direction = available_directions[0] # change this later
             

@@ -168,6 +168,7 @@ class StudentAgent(Agent):
         return True, my_score, adv_score
 
     def evaluate(self, chess_board, my_pos, adv_pos):
+        """ lower value is better here! """
         
         heuristic = 10000
         adv_x = adv_pos[0]
@@ -175,13 +176,17 @@ class StudentAgent(Agent):
         my_x = my_pos[0]
         my_y = my_pos[1]
 
+        # check if we're endgame
+        if self.check_endgame(chess_board, my_pos, adv_pos)[0]:
+            return -1
+
         # see if we're about to box ourselves in
         num_walls_around_us = 0
         for direction in [0,1,2,3]:
             if chess_board[my_x,my_y,direction]:
                 num_walls_around_us += 1
             if num_walls_around_us >=2:   # return 10000 right away since this is very bad
-                return heuristic        
+                return 10000       
         
         # manhattan distance to opponent
         x_diff = abs(adv_x - my_x)
@@ -190,6 +195,71 @@ class StudentAgent(Agent):
         heuristic = distance
 
         return heuristic
+
+    def minimax(self, chessboard, isMax, my_pos, adv_pos, depth, max_depth):
+        
+        # want to minimize score instead of maximize?
+        n = len(chessboard[0])
+        score = self.evaluate(chessboard, my_pos, adv_pos)
+        endgame_details = self.check_endgame(chessboard, my_pos, adv_pos)
+        
+        if depth == max_depth:
+            return score
+
+        if endgame_details[0]: # reached endgame
+            my_score = endgame_details[1]
+            adv_score = endgame_details[2]
+            if my_score > adv_score:
+                return -10000           # might be opposite
+            elif my_score < adv_score:
+                return 10000            # might be opposite
+            else:
+                return 0
+    
+        # If this maximizer's move
+        if (isMax) :    
+            best = -10000 # maybe opposite
+            # Traverse all cells
+            for r in range(n) :        
+                for c in range(n):
+                
+                    # Check if cell is empty
+                    if (board[i][j]=='_') :
+                    
+                        # Make the move
+                        board[i][j] = player
+    
+                        # Call minimax recursively and choose
+                        # the maximum value
+                        best = max( best, minimax(board,
+                                                depth + 1,
+                                                not isMax) )
+    
+                        # Undo the move
+                        board[i][j] = '_'
+            return best
+
+        # If this minimizer's move
+        else :
+            best = 10000  # maybe opposite
+    
+            # Traverse all cells
+            for i in range(3) :        
+                for j in range(3) :
+                
+                    # Check if cell is empty
+                    if (board[i][j] == '_') :
+                    
+                        # Make the move
+                        board[i][j] = opponent
+    
+                        # Call minimax recursively and choose
+                        # the minimum value
+                        best = min(best, minimax(board, depth + 1, not isMax))
+    
+                        # Undo the move
+                        board[i][j] = '_'
+            return best
 
     def step(self, chess_board, my_pos, adv_pos, max_step):
         """

@@ -85,43 +85,27 @@ class StudentAgent(Agent):
         barrier_dir : int
             The direction of the barrier.
         """
-        # BFS
-        state_queue = [(start_pos, 0)]
-        visited = {}
+        n = len(chess_board[0])
+        valid_steps = []
+        adv_x = adv_pos[0]
+        adv_y = adv_pos[1]
 
-        # initialize visited with all possible directions
-        for direction in [0, 1, 2, 3]:
-            if not chess_board[row, column, direction]:
-                visited.add(tuple(next_pos))
-                state_queue.append((next_pos, cur_step + 1))
-                visited.append(tuple(start_pos[0], start_pos[1], direction)) # stores possible positions
-
-        while state_queue:
-            cur_pos, cur_step = state_queue.pop(0)
-            row, column = cur_pos
-            if cur_step == max_step:
-                continue
-
-            # try stepping in each direction, don't if there's a barrier in the way
-            for dir, move in enumerate(((-1, 0), (0, 1), (1, 0), (0, -1))):
-                if chess_board[row, column, dir]:
-                    continue
-
-                next_pos = (cur_pos[0] + move[0], cur_pos[1] + move[1])
-
-                next_equals_adv = next_pos[0] == adv_pos[0] and next_pos[1] == adv_pos[1]
-                
-                # loop check and check if its the opponents position
-                if next_equals_adv or tuple(next_pos) in visited:
-                    continue
-
-                # add next position to visited and to queue
-                for direction in [0, 1, 2, 3]:
-                    if not chess_board[row, column, direction]:
-                        visited.add(tuple(next_pos[0],next_pos[1],direction))
-                        state_queue.append((next_pos, cur_step + 1))
-
-        return visited
+        for r in range(n):
+            for c in range(n):
+                # only add helpful directions to place a barrier
+                directions = []
+                if r < adv_x:
+                    directions.append("r")
+                elif r > adv_x:
+                    directions.append("l")
+                if c < adv_y:
+                    directions.append("u")
+                elif c > adv_y:
+                    directions.append("d")
+                for dir in directions:
+                    if self.check_valid_step(chess_board,start_pos,(r,c),adv_pos,dir,max_step):
+                        valid_steps.append(tuple([r,c,self.dir_map[dir]]))
+        return valid_steps
 
     def check_endgame(self, chess_board, my_pos, adv_pos):
         """
@@ -187,7 +171,7 @@ class StudentAgent(Agent):
 
         # check if we're endgame
         if self.check_endgame(chess_board, my_pos, adv_pos)[0]:
-            return -1
+            return -10000
 
         # see if we're about to box ourselves in
         num_walls_around_us = 0
@@ -205,70 +189,103 @@ class StudentAgent(Agent):
 
         return heuristic
 
-    def minimax(self, chessboard, isMax, my_pos, adv_pos, depth, max_depth):
+    def minimax(self, chessboard, isMax, my_pos, adv_pos, depth, max_depth, max_step, alpha, beta):
         
-        # want to minimize score instead of maximize?
-        n = len(chessboard[0])
-        score = self.evaluate(chessboard, my_pos, adv_pos)
+        # edit the evaluation since our heuristic function returns smaller valeus for better results
+        score = 10000-self.evaluate(chessboard, my_pos, adv_pos)  
         endgame_details = self.check_endgame(chessboard, my_pos, adv_pos)
         
-        if depth == max_depth:
+        if depth == max_depth:  # at leaf node but not endgame
             return score
 
         if endgame_details[0]: # reached endgame
             my_score = endgame_details[1]
             adv_score = endgame_details[2]
-            if my_score > adv_score:
-                return -10000           # might be opposite
-            elif my_score < adv_score:
-                return 10000            # might be opposite
-            else:
-                return 0
+            if my_score > adv_score and isMax:
+                return 10000           
+            elif my_score > adv_score and not isMax:
+                return -10000            
+            elif my_score < adv_score and isMax:
+                return -10000            
+            elif my_score < adv_score and not isMax:
+                return 10000           
+            else: # tie
+                return 0                
     
         # If this maximizer's move
         if (isMax) :    
-            best = -10000 # maybe opposite
+            best = -10000
+            
             # Traverse all cells
-            for r in range(n) :        
-                for c in range(n):
+            valid_steps = self.getValidSteps(chessboard, my_pos, adv_pos, max_step)
+            for step in valid_steps:
+                x = step[0]
+                y = step[1]
+                dir = step[2]
+                chessboard[x,y,dir] = True  # make the move
                 
-                    # Check if cell is empty
-                    if (board[i][j]=='_') :
-                    
-                        # Make the move
-                        board[i][j] = player
-    
-                        # Call minimax recursively and choose
-                        # the maximum value
-                        best = max( best, minimax(board,
-                                                depth + 1,
-                                                not isMax) )
-    
-                        # Undo the move
-                        board[i][j] = '_'
+                # Call minimax recursively and choose the max value
+                best = max(best, self.minimax(chessboard, not isMax, (x,y), adv_pos, depth+1,
+                           max_depth, max_step, alpha, beta))
+                
+                chessboard[x,y,dir] = False # Undo the move
+                
+                alpha = max(alpha, best)    # alpha-beta pruning
+                if beta <= alpha:
+                    break
             return best
 
         # If this minimizer's move
         else :
-            best = 10000  # maybe opposite
-    
+            best = 10000
+            
             # Traverse all cells
-            for i in range(3) :        
-                for j in range(3) :
+            valid_steps = self.getValidSteps(chessboard, my_pos, adv_pos, max_step)
+            for step in valid_steps:
+                x = step[0]
+                y = step[1]
+                dir = step[2]
+                chessboard[x,y,dir] = True  # make the move
                 
-                    # Check if cell is empty
-                    if (board[i][j] == '_') :
-                    
-                        # Make the move
-                        board[i][j] = opponent
-    
-                        # Call minimax recursively and choose
-                        # the minimum value
-                        best = min(best, minimax(board, depth + 1, not isMax))
-    
-                        # Undo the move
-                        board[i][j] = '_'
+                # Call minimax recursively and choose the max value
+                best = min(best, self.minimax(chessboard, not isMax, (x,y), adv_pos, depth+1,
+                                              max_depth, max_step, alpha, beta))
+                
+                chessboard[x,y,dir] = False # Undo the move
+                beta = min(beta, best)      # alpha-beta pruning
+                if beta <= alpha:
+                    break
             return best
+
+    def step1(self, chess_board, my_pos, adv_pos, max_step):
+        bestVal = -100000000
+        bestMove = (my_pos,0)
+        max_depth = 1
+
+        # Traverse all cells, evaluate minimax function for all empty cells
+        # return the cell with optimal value.
+        valid_steps = self.getValidSteps(chess_board, my_pos, adv_pos, max_step)
+        print(len(valid_steps))
+        for step in valid_steps:
+            x = step[0]
+            y = step[1]
+            dir = step[2]
+
+            # make the move
+            chess_board[x,y,dir] = True
+
+            # compute evaluation function for this move.
+            moveVal = self.minimax(chess_board, True, my_pos, adv_pos, 0, max_depth, max_step, -50000, 50000)
+            
+            # undo the move
+            chess_board[x,y,dir] = False
+            
+            # If the value of the current move is more than the best value, then update best
+            if (moveVal > bestVal):               
+                bestMove = ((x,y),dir)
+                bestVal = moveVal
+    
+        return bestMove
 
     def step(self, chess_board, my_pos, adv_pos, max_step):
         """

@@ -85,10 +85,16 @@ class StudentAgent(Agent):
         barrier_dir : int
             The direction of the barrier.
         """
-
         # BFS
         state_queue = [(start_pos, 0)]
-        visited = {tuple(start_pos)} # stores possible positions
+        visited = {}
+
+        # initialize visited with all possible directions
+        for direction in [0, 1, 2, 3]:
+            if not chess_board[row, column, direction]:
+                visited.add(tuple(next_pos))
+                state_queue.append((next_pos, cur_step + 1))
+                visited.append(tuple(start_pos[0], start_pos[1], direction)) # stores possible positions
 
         while state_queue:
             cur_pos, cur_step = state_queue.pop(0)
@@ -102,6 +108,7 @@ class StudentAgent(Agent):
                     continue
 
                 next_pos = (cur_pos[0] + move[0], cur_pos[1] + move[1])
+
                 next_equals_adv = next_pos[0] == adv_pos[0] and next_pos[1] == adv_pos[1]
                 
                 # loop check and check if its the opponents position
@@ -109,8 +116,10 @@ class StudentAgent(Agent):
                     continue
 
                 # add next position to visited and to queue
-                visited.add(tuple(next_pos))
-                state_queue.append((next_pos, cur_step + 1))
+                for direction in [0, 1, 2, 3]:
+                    if not chess_board[row, column, direction]:
+                        visited.add(tuple(next_pos[0],next_pos[1],direction))
+                        state_queue.append((next_pos, cur_step + 1))
 
         return visited
 

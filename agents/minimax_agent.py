@@ -6,12 +6,22 @@ import sys
 
 # python simulator.py --player_1 random_agent --player_2 student_agent --autoplay --autoplay_runs 1
 
-@register_agent("student_agent")
-class StudentAgent(Agent):
+@register_agent("minimax_agent")
+class MinimaxAgent(Agent):
     """
     A dummy class for your implementation. Feel free to use this class to
     add any helper functionalities needed for your agent.
     """
+    def __init__(self):
+        super(MinimaxAgent, self).__init__()
+        self.autoplay = True
+        self.name = "MinimaxAgent"
+        self.dir_map = {
+            "u": 0,
+            "r": 1,
+            "d": 2,
+            "l": 3,
+        }
 
     class State:
         def __init__(self, chess_board, my_pos, adv_pos):
@@ -22,17 +32,6 @@ class StudentAgent(Agent):
             self.my_pos = my_pos
             self.adv_pos = adv_pos
             self.children = []
-
-    def __init__(self):
-        super(StudentAgent, self).__init__()
-        self.autoplay = True
-        self.name = "StudentAgent"
-        self.dir_map = {
-            "u": 0,
-            "r": 1,
-            "d": 2,
-            "l": 3,
-        }
 
     def getValidSteps(self, chess_board, start_pos, adv_pos, max_step):
         """
@@ -49,7 +48,7 @@ class StudentAgent(Agent):
         """
         # BFS
         state_queue = [(start_pos, 0)]
-        visited = {(0,0,0)}
+        visited = set()
         visitedCoords = {tuple(start_pos)}
 
         # initialize visited with all possible directions
@@ -79,10 +78,9 @@ class StudentAgent(Agent):
                 # add next position to visited and to queue
                 visitedCoords.add(tuple(next_pos))
                 for direction in [0, 1, 2, 3]:
-                    if not chess_board[row, column, direction]:
+                    if not chess_board[next_pos[0],next_pos[1], direction]:
                         visited.add((next_pos[0],next_pos[1],direction))
                         state_queue.append((next_pos, cur_step + 1))
-        visited.remove((0,0,0))
         return visited
 
     def check_endgame(self, chess_board, my_pos, adv_pos):
@@ -140,7 +138,7 @@ class StudentAgent(Agent):
         return True, my_score, adv_score
 
     def checkStateEndgame(self, state):
-        gameDone, myScore, advScore = self.check_endgame( state.chess_board, state.my_pos, state.adv_pos)
+        gameDone, myScore, advScore = self.check_endgame(state.chess_board, state.my_pos, state.adv_pos)
         state.isTerminal = gameDone
         state.utility = advScore - myScore
         return state
@@ -157,7 +155,6 @@ class StudentAgent(Agent):
         y_diff = abs(adv_y - my_y)
         distance = x_diff + y_diff
         heuristic = distance
-
         return heuristic
 
     def miniMaxDecision(self, chess_board, my_pos, adv_pos, max_step):
@@ -165,38 +162,71 @@ class StudentAgent(Agent):
         Uses minimax value function to decide the best move
         """
         validSteps = self.getValidSteps(chess_board, my_pos, adv_pos, max_step)
-        value = []
+        value = {}
         # get the utility of each possible move
-        for row, column in validSteps:
-            newBoard = copy.deepCopy(chess_board)
-            newBoard[row,column,self.dir_map[dir]] = True
-            newState = self.State(newBoard, (row,column), adv_pos, max_step)
-            value[(row,column)] = self.miniMaxValue(self, newState)
+        for row, column, dir in validSteps:
+            newBoard = copy.deepcopy(chess_board)
+            newBoard[row,column,dir] = True
+            newState = self.State(newBoard, adv_pos, (row,column))
+            value[(row,column,dir)] = self.miniMaxValue(newState, max_step, False, 2)
         bestMove = min(value, key=value.get)
+        # print("I choose: ", bestMove, value[bestMove])
         return bestMove
 
-    def miniMaxValue(self, state, max_step, myTurn):
+    def miniMaxValue(self, state, max_step, myTurn, n):
         """
-        Predicts a few futures n steps away using the evaluate function to get the value 
-        of non-terminal end nodes
-        returns the decision to make
+        recursive, returns the utility of a given state, with the lowest being the best
         """
-        bestStep = tuple(0,0,0)
-        value = []
-        state = self.checkStateEndgame(state)
-        if state.isTerminal: return state.utility
-        # TO DO --- change this so that these are state objects
+        value = {}
+
+        gameDone, myScore, advScore = self.check_endgame(state.chess_board, state.my_pos, state.adv_pos)
+        state.isTerminal = gameDone
+        state.utility = myScore - advScore
+        if myTurn: utility = self.evaluate(state.chess_board, state.my_pos, state.adv_pos)
+        else: utility = self.evaluate(state.chess_board, state.adv_pos, state.my_pos)
+
+        if gameDone: 
+            if myTurn: 
+                score = advScore - myScore
+                # weight losses as bad
+                if score >= 0: score = score + 10000
+            else: 
+                score = myScore - advScore
+            return score
+        if n == 0: 
+            return utility
+        if utility > 5:
+            return utility
+        
         validSteps = self.getValidSteps(state.chess_board, state.my_pos, state.adv_pos, max_step)
-        children = {}
+        children = set()
         for row,column,dir in validSteps:
             newBoard = copy.deepcopy(state.chess_board)
-            newBoard[row,column,self.dir_map[dir]] = True
-            children.add(self.State())
+            newBoard[row,column,dir] = True
+            # add a child state where the other player makes the decision so swap positions
+            children.add(self.State(newBoard, state.adv_pos, (row,column)))
         for child in children:
-            value[child] = self.miniMaxValue(child,max_step)
-        if myTurn: bestStep = min(value, key=value.get)
-        else: bestStep = max(value, key=value.get)
-        return bestStep
+            # get the value of the child state, alternating between myTurn and not MyTurn
+            value[child] = self.miniMaxValue(child, max_step, not(myTurn), n-1)
+        
+        # troubleshooting
+        if (value == {}):
+            if myTurn: 
+                score = advScore - myScore
+                # weight losses as bad
+                if score >= 0: score = score + 10000 
+            else: 
+                score = myScore - advScore
+            return score
+
+        if myTurn: 
+            score = min(value.values())
+            bestMove = min(value, key=value.get)
+        else: 
+            score = max(value.values())
+            bestMove = max(value, key=value.get)
+        #if (n==1): print(bestMove.my_pos, score)
+        return score
 
     def step(self, chess_board, my_pos, adv_pos, max_step):
         """
@@ -214,50 +244,8 @@ class StudentAgent(Agent):
         Please check the sample implementation in agents/random_agent.py or agents/human_agent.py for more details.
         """
 
-        direction = "u"
-        n = len(chess_board[1])
-        adv_x = adv_pos[0]
-        adv_y = adv_pos[1]
-        my_x = my_pos[0]
-        my_y = my_pos[1]
-
-        validSteps = self.getValidSteps(chess_board, my_pos, adv_pos, max_step)
-
-        # get distance from us to adv at each possible next move
-        distance_from_adv = [[10000 for x in range(n)] for y in range(n)] 
-        min_distance = 10000
-        best_coordinates = [my_x, my_y, 0]
-
-        for (row,column,dir) in validSteps: # check valid position
-
-            # check the move wins
-            newBoard = copy.deepcopy(chess_board)
-            newBoard[row,column,dir] = True
-            gameDone, myScore, advScore = self.check_endgame( newBoard, (row,column), adv_pos)
-            if gameDone:
-                result = myScore - advScore
-                if result > 0:
-                    return (row,column), dir
-
-            # see if we're about to box ourselves in
-            num_walls_around_us = 0
-            for direction in [0,1,2,3]:
-                if chess_board[row,column,direction]:
-                    num_walls_around_us += 1
-            if num_walls_around_us >=2:
-                continue
-
-            # else run at opponent
-            x_diff = abs(adv_x - row)
-            y_diff = abs(adv_y - column)
-            distance = x_diff + y_diff
-            distance_from_adv[row][column] = distance
-            if x_diff + y_diff < min_distance:
-                min_distance = distance
-                best_coordinates[0] = row
-                best_coordinates[1] = column
-                best_coordinates[2] = dir
+        bestCoordinates = self.miniMaxDecision(chess_board,my_pos,adv_pos,max_step)
             
-        bestStep = (best_coordinates[0],best_coordinates[1])
-        bestDir = best_coordinates[2]
+        bestStep = (bestCoordinates[0],bestCoordinates[1])
+        bestDir = bestCoordinates[2]
         return (bestStep,bestDir)

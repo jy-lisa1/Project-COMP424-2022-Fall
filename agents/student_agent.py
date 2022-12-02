@@ -87,22 +87,10 @@ class StudentAgent(Agent):
         """
         n = len(chess_board[0])
         valid_steps = []
-        adv_x = adv_pos[0]
-        adv_y = adv_pos[1]
 
         for r in range(n):
             for c in range(n):
-                # only add helpful directions to place a barrier
-                directions = []
-                if r < adv_x:
-                    directions.append("r")
-                elif r > adv_x:
-                    directions.append("l")
-                if c < adv_y:
-                    directions.append("u")
-                elif c > adv_y:
-                    directions.append("d")
-                for dir in directions:
+                for dir in ["r","l","u","d"]:
                     if self.check_valid_step(chess_board,start_pos,(r,c),adv_pos,dir,max_step):
                         valid_steps.append(tuple([r,c,self.dir_map[dir]]))
         return valid_steps
@@ -257,10 +245,10 @@ class StudentAgent(Agent):
                     break
             return best
 
-    def step1(self, chess_board, my_pos, adv_pos, max_step):
+    def step(self, chess_board, my_pos, adv_pos, max_step):
         bestVal = -100000000
         bestMove = (my_pos,0)
-        max_depth = 1
+        max_depth = 2
 
         # Traverse all cells, evaluate minimax function for all empty cells
         # return the cell with optimal value.
@@ -287,7 +275,7 @@ class StudentAgent(Agent):
     
         return bestMove
 
-    def step(self, chess_board, my_pos, adv_pos, max_step):
+    def step1(self, chess_board, my_pos, adv_pos, max_step):
         """
         Implement the step function of your agent here.
         You can use the following variables to access the chess board:
